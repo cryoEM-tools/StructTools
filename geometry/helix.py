@@ -24,7 +24,7 @@ def _get_backbone_nums(top, resnums):
     return backbone_nums
 
 
-def helix_thread(
+def thread(
         trj, helix_resnums, helix_start=None, helix_stop=None):
     """Calculates a thread along the center of a helix, with center
     point and vector corresponding to each residue location. Computes
@@ -92,4 +92,20 @@ def helix_thread(
             for n in np.arange(backbone_avgs.shape[1]-n_vec_avg)],
         axes=(1,0,2))
 
-    return vectors, center_coords
+    # unit norm vectors
+    vector_mags = np.sqrt(np.einsum('ijk,ijk->ij',vectors, vectors))[:,:,None]
+    vectors_normed = vectors / vector_mags 
+
+    return vectors_normed, center_coords
+
+
+def local_bending(trj, helix_resnums, n_res_buffer=2, **kwargs):
+    vectors_normed, _ = thread(trj, helix_resnums, **kwargs)
+    window = 2*n_res_buffer
+    bend_angles = np.zeros(shape=(vectors_normed.shape[0], vectors_normed.shape[1]))
+    bend_angles_tmp = np.arccos(
+        np.einsum(
+            'ijk,ijk->ij', vectors_normed[:,window:], vectors_normed[:,:-window]))
+    bend_angles_tmp *= 360/(np.pi*2)
+    bend_angles[:,n_res_buffer:-n_res_buffer] = bend_angles_tmp
+    return bend_angles
