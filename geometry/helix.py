@@ -100,12 +100,41 @@ def thread(
 
 
 def local_bending(trj, helix_resnums, n_res_buffer=2, **kwargs):
+    """Calculates the local bending angle of an alpha-helix on a per-residue
+    basis, in units of degrees
+
+    Inputs
+    ----------
+    trj : mdtraj.Trajectory,
+        A list of structures to use for calculating helix bending angles.
+    helix_resnums : array-like, shape=(n_residues, )
+        A list of resSeq numbers that correspond to a helix to use for
+        calculate bending angles. Will extend 2 residues in both directions
+        for local helix directions.
+    n_res_buffer : int, default=2,
+        The number of residues in each direction to consider "local" bending.
+        For a value of 2, calculates angle between i-2 and i+2 helical
+        direction vectors.
+        
+    Outputs
+    ----------
+    bend_angles : nd.array, shape=(n_frames, n_residues, 3),
+        A list of helical bending angles per residue for each frame.
+
+    """
+    # determine localized helix directions
     vectors_normed, _ = thread(trj, helix_resnums, **kwargs)
+
+    # define window for measuring angles
     window = 2*n_res_buffer
+
+    # determine bending angles
     bend_angles = np.zeros(shape=(vectors_normed.shape[0], vectors_normed.shape[1]))
     bend_angles_tmp = np.arccos(
         np.einsum(
             'ijk,ijk->ij', vectors_normed[:,window:], vectors_normed[:,:-window]))
     bend_angles_tmp *= 360/(np.pi*2)
+
+    # angles of residues at ends is 0 (excluded from window size)
     bend_angles[:,n_res_buffer:-n_res_buffer] = bend_angles_tmp
     return bend_angles
