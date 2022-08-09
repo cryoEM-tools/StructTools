@@ -56,7 +56,20 @@ def project_observable(
 
 
 def project_2D(
-        data, n_bins=50, extra_spread=0.3, eq_probs=None, color_palette=plt.cm.hot_r):
+        data, nbins=50, extra_spread=0.3, eq_probs=None, color_palette=plt.cm.hot_r):
+    """Generates a 2d population weighted histogram of a MSM projected onto 2 observables.
+
+    data : array, shape=(n_states, 2),
+        A list of x,y points, where x and y correspond to observables of a MSM.
+    nbins : int, default=50,
+        Number of bins for making 2D histogram.
+    extra_spread : float, default=0.3,
+        Fraction to extend axes when making plot. Default of 0.3 looks pretty good.
+    eq_probs : array, shape=(n_states,)
+        The equilibrium populations of the MSM.
+    """
+    data = np.array(data)
+    x,y = data.T
     x_spread = x.max() - x.min()
     x_add = x_spread*extra_spread
     y_spread = y.max() - y.min()
@@ -117,3 +130,28 @@ def plot_fig(
                 color=color, linewidth=3)
         plt.legend(loc=2, prop={'size': 18})
     return pfig, ax
+
+
+def multi_bar_plot(
+        bar_y_data, bar_x_labels, colors, labels, big_axis_width=1.0,
+        bar_width=None, figsize=(8,4), **kwargs):
+    """Generates a bar plot with 
+
+    """
+    if bar_width is None:
+        bar_width = (big_axis_width*0.8) / len(bar_y_data)
+    big_axis = np.arange(bar_x_labels.shape[0])*big_axis_width
+    
+    n_bars = len(bar_y_data)
+    start_small_axis = -bar_width*(n_bars/2) + bar_width/2
+    small_axis = [start_small_axis + bar_width*n for n in np.arange(n_bars)]
+    small_axes = [big_axis + a for a in small_axis]
+    
+    fig = plt.figure(figsize=(8,4))
+    for n in np.arange(len(small_axes)):
+        plt.bar(
+            small_axes[n], bar_y_data[n], width=bar_width, color=colors[n], label=labels[n], **kwargs)
+
+    plt.xticks(big_axis, (bar_x_labels))
+    plt.legend(loc=0)
+    return multi_bar_plot
