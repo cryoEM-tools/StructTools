@@ -19,34 +19,34 @@ convert_map_fancy = {
 
 
 
-def pairwise_dists(struct0, struct1):
+def pairwise_dists(structA, structB):
     """calculate pairwise distances between atoms in two structures.
 
     Inputs
     ----------
-    struct0 : md.Trajectory
+    structA : md.Trajectory
         First structure for calculating pairwise distances.
-    struct1 : md.Trajectory
+    structB : md.Trajectory
 
     Returns
     ----------
-    dists : nd.array, shape=(n_states_struct0, n_states_struct1),
+    dists : nd.array, shape=(n_states_structA, n_states_structB),
         Pairwise distances between struct 0 and 1. i,j corresponds to distance
-        between ith atom in struct0 and jth atom in struct1.
+        between ith atom in structA and jth atom in structB.
     """
-    diffs = np.abs(struct0.xyz[0][:,None,:] - struct1.xyz[0])
+    diffs = np.abs(structA.xyz[0][:,None,:] - structB.xyz[0])
     dists = np.sqrt(np.einsum('ijk,ijk->ij', diffs, diffs))
     return dists
 
 
-def min_dists(struct0, struct1, mode='residue'):
+def min_dists(structA, structB, mode='residue'):
     """Obtain the minimum distance between residues or atoms in two structures.
 
     Inputs
     ----------
-    struct0 : md.Trajectory,
+    structA : md.Trajectory,
         First structure for calculating minimum distances.
-    struct1 : md.Trajectory,
+    structB : md.Trajectory,
         Second structure for calculating minimum distances.
     mode : str, options=['residue', 'atom'], default='residue,
         Calculate minimum distances either on a residue level, or
@@ -54,103 +54,103 @@ def min_dists(struct0, struct1, mode='residue'):
 
     Returns
     ----------
-    min_dists_struct0, nd.array, shape=(n_atoms_struct0,) or (n_residues_struct0,),
-        The minimum distance between residue i in struct0 and any residue in struct1.
-    min_dists_struct1, nd.array, shape=(n_atoms_struct1,) or (n_residues_struct1,),
-        The minimum distance between residue i in struct1 and any residue in struct0.
+    min_dists_structA, nd.array, shape=(n_atoms_structA,) or (n_residues_structA,),
+        The minimum distance between residue i in structA and any residue in structB.
+    min_dists_structB, nd.array, shape=(n_atoms_structB,) or (n_residues_structB,),
+        The minimum distance between residue i in structB and any residue in structA.
     """
     # get pairwise distance matrix
-    pairwise_dist_mat = pairwise_dists(struct0, struct1)
+    pairwise_dist_mat = pairwise_dists(structA, structB)
     
     # obtain minimum distances
-    min_atomic_dists_struct0 = np.min(pairwise_dist_mat, axis=1)
-    min_atomic_dists_struct1 = np.min(pairwise_dist_mat, axis=0)
+    min_atomic_dists_structA = np.min(pairwise_dist_mat, axis=1)
+    min_atomic_dists_structB = np.min(pairwise_dist_mat, axis=0)
 
     # if mode is residues, return minimum residue distance
     if mode == 'residue':
-        resSeqs_struct0 = [r.resSeq for r in struct0.top.residues]
-        resSeqs_struct1 = [r.resSeq for r in struct1.top.residues]
-        resi_iis_struct0 = [[a.index for a in r.atoms] for r in struct0.top.residues]
-        resi_iis_struct1 = [[a.index for a in r.atoms] for r in struct1.top.residues]
-        min_dists_struct0 = np.array(
+        resSeqs_structA = [r.resSeq for r in structA.top.residues]
+        resSeqs_structB = [r.resSeq for r in structB.top.residues]
+        resi_iis_structA = [[a.index for a in r.atoms] for r in structA.top.residues]
+        resi_iis_structB = [[a.index for a in r.atoms] for r in structB.top.residues]
+        min_dists_structA = np.array(
             [
-                min_atomic_dists_struct0[iis].min() for iis in resi_iis_struct0])
-        min_dists_struct1 = np.array(
+                min_atomic_dists_structA[iis].min() for iis in resi_iis_structA])
+        min_dists_structB = np.array(
             [
-                min_atomic_dists_struct1[iis].min() for iis in resi_iis_struct1])
+                min_atomic_dists_structB[iis].min() for iis in resi_iis_structB])
     else:
-        min_dists_struct0 = min_atomic_dists_struct0
-        min_dists_struct1 = min_atomic_dists_struct1
-    return min_dists_struct0, min_dists_struct1
+        min_dists_structA = min_atomic_dists_structA
+        min_dists_structB = min_atomic_dists_structB
+    return min_dists_structA, min_dists_structB
 
 
-def count_contacts_distance(struct0, struct1, cutoff=0.39, **kwargs):
-    """Count contacts between struct0 and struct1.
+def count_contacts_distance(structA, structB, cutoff=0.39, **kwargs):
+    """Count contacts between structA and structB.
 
     Inputs
     ----------
-    struct0 : md.Trajectory,
+    structA : md.Trajectory,
         First structure for calculating contacts.
-    struct1 : md.Trajectory,
+    structB : md.Trajectory,
         Second structure for calculating contacts.
     cutoff : float, default=0.39,
         The threshold distance between atoms to count a contact.
 
     Returns
     ----------
-    contacts_struct0 : nd.array, shape=(n_atoms_struct0,) or (n_residues_struct0,),
-        Array detailing number of contacts for each atom or residue in struct0.
-    contacts_struct1 : nd.array, shape=(n_atoms_struct1,) or (n_residues_struct1,),
-        Array detailing number of contacts for each atom or residue in struct1.
+    contacts_structA : nd.array, shape=(n_atoms_structA,) or (n_residues_structA,),
+        Array detailing number of contacts for each atom or residue in structA.
+    contacts_structB : nd.array, shape=(n_atoms_structB,) or (n_residues_structB,),
+        Array detailing number of contacts for each atom or residue in structB.
     """
     # get pairwise distance matrix
-    pairwise_dist_mat = pairwise_dists(struct0, struct1)
+    pairwise_dist_mat = pairwise_dists(structA, structB)
     
     # obtain contacts
     contacts_mask = pairwise_dist_mat <= cutoff
     
     # count contacts
-    contacts_struct0, contacts_struct1 = _count_contacts_from_mask(
-        struct0, struct1, contacts_mask, **kwargs)
+    contacts_structA, contacts_structB = _count_contacts_from_mask(
+        structA, structB, contacts_mask, **kwargs)
 
-    return contacts_struct0, contacts_struct1
+    return contacts_structA, contacts_structB
 
 
-def pairwise_VDW_radii(struct0, struct1):
+def pairwise_VDW_radii(structA, structB):
     """Generates pairwise van der Waal radii between 2 sets of atoms.
 
     Inputs
     ----------
-    struct0 : md.Trajectory,
+    structA : md.Trajectory,
         First structure for determining VDW radii.
-    struct1 : md.Trajectory,
+    structB : md.Trajectory,
         Second structure for determining VDW radii.
 
     Returns
     ----------
-    VDW_radii : nd.array, shape=(n_atoms0, n_atoms1,)
-        pairwise sum of van der Waal radii between struct0 and struct1.
+    VDW_radii : nd.array, shape=(n_atomsA, n_atomsB,)
+        pairwise sum of van der Waal radii between structA and structB.
     """
 
     # obtain struct VDW radii
-    VDW_radii_struct0 = np.array([a.element.radius for a in struct0.top.atoms])
-    VDW_radii_struct1 = np.array([a.element.radius for a in struct1.top.atoms])
+    VDW_radii_structA = np.array([a.element.radius for a in structA.top.atoms])
+    VDW_radii_structB = np.array([a.element.radius for a in structB.top.atoms])
 
     # combine and sum radii
-    VDW_expanded = np.array([[v]*VDW_radii_struct1.shape[0] for v in VDW_radii_struct0])
-    VDW_radii = VDW_expanded + VDW_radii_struct1[None,:]
+    VDW_expanded = np.array([[v]*VDW_radii_structB.shape[0] for v in VDW_radii_structA])
+    VDW_radii = VDW_expanded + VDW_radii_structB[None,:]
 
     return VDW_radii
 
 
-def count_contacts_VDW(struct0, struct1, VDW_dist=1.4, atoms='all', **kwargs):
-    """Count contacts between struct0 and struct1.
+def count_contacts_VDW(structA, structB, VDW_dist=1.4, atoms='all', **kwargs):
+    """Count contacts between structA and structB.
 
     Inputs
     ----------
-    struct0 : md.Trajectory,
+    structA : md.Trajectory,
         First structure for calculating contacts.
-    struct1 : md.Trajectory,
+    structB : md.Trajectory,
         Second structure for calculating contacts.
     VDW_frac_cutoff : float, default=1.4,
         The threshold van der Waals cutoff, expressed in fraction of
@@ -160,44 +160,44 @@ def count_contacts_VDW(struct0, struct1, VDW_dist=1.4, atoms='all', **kwargs):
 
     Returns
     ----------
-    contacts_struct0 : nd.array, shape=(n_atoms_struct0,) or (n_residues_struct0,),
-        Array detailing number of contacts for each atom or residue in struct0.
-    contacts_struct1 : nd.array, shape=(n_atoms_struct1,) or (n_residues_struct1,),
-        Array detailing number of contacts for each atom or residue in struct1.
+    contacts_structA : nd.array, shape=(n_atoms_structA,) or (n_residues_structA,),
+        Array detailing number of contacts for each atom or residue in structA.
+    contacts_structB : nd.array, shape=(n_atoms_structB,) or (n_residues_structB,),
+        Array detailing number of contacts for each atom or residue in structB.
     """
 
     assert atoms in ['all', 'heavy']
 
     if atoms == 'heavy':
-        struct0 = struct0.atom_slice(struct0.top.select_atom_indices('heavy'))
-        struct1 = struct1.atom_slice(struct1.top.select_atom_indices('heavy'))
+        structA = structA.atom_slice(structA.top.select_atom_indices('heavy'))
+        structB = structB.atom_slice(structB.top.select_atom_indices('heavy'))
 
     # get pairwise distance matrix
-    pairwise_dist_mat = pairwise_dists(struct0, struct1)
+    pairwise_dist_mat = pairwise_dists(structA, structB)
 
     # get pairwise VDW radii
-    VDW_radii = pairwise_VDW_radii(struct0, struct1)
+    VDW_radii = pairwise_VDW_radii(structA, structB)
     
     # obtain contacts
     contacts_mask = pairwise_dist_mat / VDW_radii <= VDW_dist
 
     # count contacts
-    contacts_struct0, contacts_struct1 = _count_contacts_from_mask(
-        struct0, struct1, contacts_mask, **kwargs)
+    contacts_structA, contacts_structB = _count_contacts_from_mask(
+        structA, structB, contacts_mask, **kwargs)
 
-    return contacts_struct0, contacts_struct1
+    return contacts_structA, contacts_structB
 
 
 def pairwise_contacts(
-        struct0, struct1, criterion='VDW', VDW_dist=1.4, dist_cutoff=0.39,
+        structA, structB, criterion='VDW', VDW_dist=1.4, dist_cutoff=0.39,
         atoms='all', mode='residue'):
-    """List out all pairwise contacts between struct0 and struct 1
+    """List out all pairwise contacts between structA and struct 1
 
     Inputs
     ----------
-    struct0 : md.Trajectory,
+    structA : md.Trajectory,
         The first structure to use for calculating close contacts.
-    struct1 : md.Trajectory,
+    structB : md.Trajectory,
         The second structure to use for calculating close contacts.
     criterion : str, choices=['VDW', 'dist'], default='VDW',
         Criterion for determining close contacts, either as a fraction
@@ -210,21 +210,37 @@ def pairwise_contacts(
     dist_cutoff : float, default=0.39,
         The distance cutoff for determining a close-contact. Default is
         set to 0.39 nm.
-    atoms : str, choices=['all', 'heavy'], default='all',
+    atoms : str, choices=['all', 'heavy', 'backbone', 'Ca'], default='all',
         Atoms to include for close contacts, 'all', or 'heavy'. Use all
         atoms or only heavy atoms.
     mode : str, choices=['residue', 'atom'], default='residue',
         Option for computing granularity of contacts. Can count based
         on residues or per atom pair.
     """
+
+    # select atom indices
+    if atoms == 'heavy':
+        structA = structA.atom_slice(structA.top.select_atom_indices('heavy'))
+        structB = structB.atom_slice(structB.top.select_atom_indices('heavy'))
+    elif atoms == 'backbone':
+        structA = structA.atom_slice(structA.top.select_atom_indices('minimal'))
+        structB = structB.atom_slice(structB.top.select_atom_indices('minimal'))
+    elif atoms == 'Ca':
+        structA = structA.atom_slice(structA.top.select('name CA'))
+        structB = structB.atom_slice(structB.top.select('name CA'))
+    elif atoms == 'all':
+        pass
+    else:
+        raise
+        
     
     # get pairwise distance matrix
-    pairwise_dist_mat = pairwise_dists(struct0, struct1)
+    pairwise_dist_mat = pairwise_dists(structA, structB)
 
     if criterion == 'VDW':
 
         # get pairwise VDW radii
-        VDW_radii = pairwise_VDW_radii(struct0, struct1)
+        VDW_radii = pairwise_VDW_radii(structA, structB)
     
         # obtain contacts
         contacts_mask = pairwise_dist_mat / VDW_radii <= VDW_dist
@@ -235,28 +251,28 @@ def pairwise_contacts(
         contacts_mask = pairwise_dist_mat <= dist_cutoff
 
     if mode == 'atom':
-        names0 = np.array([str(a) for a in struct0.top.atoms])
-        names1 = np.array([str(a) for a in struct1.top.atoms])
+        names0 = np.array([str(a) for a in structA.top.atoms])
+        names1 = np.array([str(a) for a in structB.top.atoms])
         iis_contacts = np.where(contacts_mask > 0)
         n_contacts = contacts_mask[iis_contacts]
 
     elif mode == 'residue':
-        names0 = np.array([str(r) for r in struct0.top.residues])
-        names1 = np.array([str(r) for r in struct1.top.residues])
+        names0 = np.array([str(r) for r in structA.top.residues])
+        names1 = np.array([str(r) for r in structB.top.residues])
 
-        resi_iis_struct0 = [[a.index for a in r.atoms] for r in struct0.top.residues]
-        resi_iis_struct1 = [[a.index for a in r.atoms] for r in struct1.top.residues]
+        resi_iis_structA = [[a.index for a in r.atoms] for r in structA.top.residues]
+        resi_iis_structB = [[a.index for a in r.atoms] for r in structB.top.residues]
 
-        n_resis0 = len(resi_iis_struct0)
-        n_resis1 = len(resi_iis_struct1)
-        contacts_mask_residues = np.zeros((n_resis0, n_resis1), dtype=int)
-        for i in np.arange(n_resis0):
-            for j in np.arange(n_resis1):
+        n_resisA = len(resi_iis_structA)
+        n_resisB = len(resi_iis_structB)
+        contacts_mask_residues = np.zeros((n_resisA, n_resisB), dtype=int)
+        for i in np.arange(n_resisA):
+            for j in np.arange(n_resisB):
                 x,y = np.array(
                     list(
                         itertools.product(
-                            resi_iis_struct0[i],
-                            resi_iis_struct1[j]))).T
+                            resi_iis_structA[i],
+                            resi_iis_structB[j]))).T
                 contacts_mask_residues[i,j] = contacts_mask[x,y].sum()
         iis_contacts = np.where(contacts_mask_residues > 0)
         n_contacts = contacts_mask_residues[iis_contacts]
@@ -267,124 +283,124 @@ def pairwise_contacts(
     return contact_pairs, n_contacts
 
 
-def _count_contacts_from_mask(struct0, struct1, contacts_mask, mode='residue'):
+def _count_contacts_from_mask(structA, structB, contacts_mask, mode='residue'):
     """Helper function to count contacts from a pairwise atomic mask
 
     Inputs
     ----------
-    struct0 : md.Trajectory,
+    structA : md.Trajectory,
         First structure to use for topology.
-    struct1 : md.Trajectory,
+    structB : md.Trajectory,
         Second structure to use for topology.
-    contacts_mask : boolean-nd.array, shape=(n_atoms0, n_atoms1),
-        Mask for counting contacts between struct0 and struct1.
+    contacts_mask : boolean-nd.array, shape=(n_atomsA, n_atomsB),
+        Mask for counting contacts between structA and structB.
 
     Returns
     ----------
-    contacts_struct0 : nd.array, shape=(n_atoms_struct0,) or (n_residues_struct0,),
-        Array detailing number of contacts for each atom or residue in struct0.
-    contacts_struct1 : nd.array, shape=(n_atoms_struct1,) or (n_residues_struct1,),
-        Array detailing number of contacts for each atom or residue in struct1.
+    contacts_structA : nd.array, shape=(n_atoms_structA,) or (n_residues_structA,),
+        Array detailing number of contacts for each atom or residue in structA.
+    contacts_structB : nd.array, shape=(n_atoms_structB,) or (n_residues_structB,),
+        Array detailing number of contacts for each atom or residue in structB.
     """
-    atomic_contacts_struct0 = np.sum(contacts_mask, axis=1)
-    atomic_contacts_struct1 = np.sum(contacts_mask, axis=0)
+    atomic_contacts_structA = np.sum(contacts_mask, axis=1)
+    atomic_contacts_structB = np.sum(contacts_mask, axis=0)
 
     # if mode is residues, return minimum residue distance
     if mode == 'residue':
-        resSeqs_struct0 = [r.resSeq for r in struct0.top.residues]
-        resSeqs_struct1 = [r.resSeq for r in struct1.top.residues]
-        resi_iis_struct0 = [[a.index for a in r.atoms] for r in struct0.top.residues]
-        resi_iis_struct1 = [[a.index for a in r.atoms] for r in struct1.top.residues]
-        contacts_struct0 = np.array(
+        resSeqs_structA = [r.resSeq for r in structA.top.residues]
+        resSeqs_structB = [r.resSeq for r in structB.top.residues]
+        resi_iis_structA = [[a.index for a in r.atoms] for r in structA.top.residues]
+        resi_iis_structB = [[a.index for a in r.atoms] for r in structB.top.residues]
+        contacts_structA = np.array(
             [
-                atomic_contacts_struct0[iis].sum() for iis in resi_iis_struct0])
-        contacts_struct1 = np.array(
+                atomic_contacts_structA[iis].sum() for iis in resi_iis_structA])
+        contacts_structB = np.array(
             [
-                atomic_contacts_struct1[iis].sum() for iis in resi_iis_struct1])
+                atomic_contacts_structB[iis].sum() for iis in resi_iis_structB])
     else:
-        contacts_struct0 = atomic_contacts_struct0
-        contacts_struct1 = atomic_contacts_struct1
-    return contacts_struct0, contacts_struct1
+        contacts_structA = atomic_contacts_structA
+        contacts_structB = atomic_contacts_structB
+    return contacts_structA, contacts_structB
 
 
 small_number = 1E-9
-def _calc_sasa_apo_holo(struct0, struct1, mode='residue', **kwargs):
+def _calc_sasa_apo_holo(structA, structB, mode='residue', **kwargs):
     """Calculates the solvent exposure of two structures and their differences when bound.
 
     Inputs
     ----------
-    struct0 : md.Trajectory,
+    structA : md.Trajectory,
         First structure for calculating SASAs.
-    struct1 : md.Trajectory,
+    structB : md.Trajectory,
         Second structure for calculating SASAs.
     mode : str, choices=['atom', 'residue']
         Optionally return SASA by atom or residue.
 
     Returns
     ----------
-    sasa_struct0_apo : nd.array, shape=(n_atoms,) or (n_residues),
-        The SASA of struct0 in isolation, either by atom or residue.
-    sasa_struct1_apo : nd.array, shape=(n_atoms,) or (n_residues),
-        The SASA of struct1 in isolation, either by atom or residue.
-    sasa_struct0_holo : nd.array, shape=(n_atoms,) or (n_residues),
-        The SASA of struct0 in isolation, either by atom or residue.
-    sasa_struct1_holo : nd.array, shape=(n_atoms,) or (n_residues),
-        The SASA of struct1 in isolation, either by atom or residue.
+    sasa_structA_apo : nd.array, shape=(n_atoms,) or (n_residues),
+        The SASA of structA in isolation, either by atom or residue.
+    sasa_structB_apo : nd.array, shape=(n_atoms,) or (n_residues),
+        The SASA of structB in isolation, either by atom or residue.
+    sasa_structA_holo : nd.array, shape=(n_atoms,) or (n_residues),
+        The SASA of structA in isolation, either by atom or residue.
+    sasa_structB_holo : nd.array, shape=(n_atoms,) or (n_residues),
+        The SASA of structB in isolation, either by atom or residue.
     """ 
-    # obtain combined structure (add struct1 to struct0)
-    combined_struct_topol = struct0.topology.copy().join(struct1.topology)
-    combined_struct_xyz = np.concatenate([struct0.xyz, struct1.xyz], axis=1)
+    # obtain combined structure (add structB to structA)
+    combined_struct_topol = structA.topology.copy().join(structB.topology)
+    combined_struct_xyz = np.concatenate([structA.xyz, structB.xyz], axis=1)
     combined_struct = md.Trajectory(combined_struct_xyz, combined_struct_topol)
     
     # only residue mode is currently supported
     if mode == 'residue':
         
         # calculate SASAs
-        sasa_struct0_apo = md.shrake_rupley(
-            struct0, mode='residue', **kwargs)[0] + small_number
-        sasa_struct1_apo = md.shrake_rupley(
-            struct1, mode='residue', **kwargs)[0] + small_number
+        sasa_structA_apo = md.shrake_rupley(
+            structA, mode='residue', **kwargs)[0] + small_number
+        sasa_structB_apo = md.shrake_rupley(
+            structB, mode='residue', **kwargs)[0] + small_number
         sasa_combined_states = md.shrake_rupley(
             combined_struct, mode='residue', **kwargs)[0] + small_number
         
-        # extract struct0 and struct1 from combined structure
-        sasa_struct0_holo = sasa_combined_states[:struct0.n_residues]
-        sasa_struct1_holo = sasa_combined_states[struct0.n_residues:]
+        # extract structA and structB from combined structure
+        sasa_structA_holo = sasa_combined_states[:structA.n_residues]
+        sasa_structB_holo = sasa_combined_states[structA.n_residues:]
     else:
         raise
         
     # return sasas        
-    return sasa_struct0_apo, sasa_struct0_holo, sasa_struct1_apo, sasa_struct1_holo
+    return sasa_structA_apo, sasa_structA_holo, sasa_structB_apo, sasa_structB_holo
 
 
-def sasa_change_fraction(struct0, struct1, **kwargs):
+def sasa_change_fraction(structA, structB, **kwargs):
     """Calculate the percentage SASA change from apo to holo.
 
     Inputs
     ----------
-    struct0 : md.Trajectory,
+    structA : md.Trajectory,
         First structure for calculating SASAs.
-    struct1 : md.Trajectory,
+    structB : md.Trajectory,
         Second structure for calculating SASAs.
 
     Returns
     ----------
-    sasa_change_frac_struct0 : nd.array, shape=(n_atoms,) or (n_residues),
-        The fraction change of SASA on struct0 apo v holo.
-    sasa_change_frac_struct1 : nd.array, shape=(n_atoms,) or (n_residues),
-        The fraction change of SASA on struct1 apo v holo.
+    sasa_change_frac_structA : nd.array, shape=(n_atoms,) or (n_residues),
+        The fraction change of SASA on structA apo v holo.
+    sasa_change_frac_structB : nd.array, shape=(n_atoms,) or (n_residues),
+        The fraction change of SASA on structB apo v holo.
     """
 
     # calculate SASAs
-    sasa_struct0_apo, sasa_struct0_holo, sasa_struct1_apo, sasa_struct1_holo = \
-        calc_sasa_apo_holo(struct0, struct1, **kwargs)
+    sasa_structA_apo, sasa_structA_holo, sasa_structB_apo, sasa_structB_holo = \
+        calc_sasa_apo_holo(structA, structB, **kwargs)
 
     # calculate fractional change
-    sasa_change_struct0 = sasa_struct0_apo - sasa_struct0_holo
-    sasa_change_struct1 = sasa_struct1_apo - sasa_struct1_holo
-    sasa_change_frac_struct0 = (sasa_change_struct0 / sasa_struct0_apo)
-    sasa_change_frac_struct1 = (sasa_change_struct1 / sasa_struct1_apo)
-    return sasa_change_frac_struct0, sasa_change_frac_struct1
+    sasa_change_structA = sasa_structA_apo - sasa_structA_holo
+    sasa_change_structB = sasa_structB_apo - sasa_structB_holo
+    sasa_change_frac_structA = (sasa_change_structA / sasa_structA_apo)
+    sasa_change_frac_structB = (sasa_change_structB / sasa_structB_apo)
+    return sasa_change_frac_structA, sasa_change_frac_structB
 
 
 def bin_sasa_change(sasas):
@@ -395,29 +411,29 @@ def bin_sasa_change(sasas):
     return sasas
 
 
-def count_PISA_contacts(struct0, struct1, **kwargs):
+def count_PISA_contacts(structA, structB, **kwargs):
     """Determine strength of residue-residue contacts using PISA conventions.
     Strength is reported in fraction of SASA change between apo-holo structures.
 
     Inputs
     ----------
-    struct0 : md.Trajectory,
+    structA : md.Trajectory,
         First structure for calculating SASAs.
-    struct1 : md.Trajectory,
+    structB : md.Trajectory,
         Second structure for calculating SASAs.
 
     Returns
     ----------
-    PISA_SASA_struct0 : nd.array, shape=(n_residues,),
-        Categorized contacts per residue for struct0.
-    PISA_SASA_struct1 : nd.array, shape=(n_residues,),
-        Categorized contacts per residue for struct1.
+    PISA_SASA_structA : nd.array, shape=(n_residues,),
+        Categorized contacts per residue for structA.
+    PISA_SASA_structB : nd.array, shape=(n_residues,),
+        Categorized contacts per residue for structB.
     """
-    sasa_frac_struct0, sasa_frac_struct1 = sasa_change_fraction(
-        struct0, struct1, **kwargs)
-    PISA_SASA_struct0 = bin_sasa_change(sasa_frac_struct0)
-    PISA_SASA_struct1 = bin_sasa_change(sasa_frac_struct1)
-    return PISA_SASA_struct0, PISA_SASA_struct1
+    sasa_frac_structA, sasa_frac_structB = sasa_change_fraction(
+        structA, structB, **kwargs)
+    PISA_SASA_structA = bin_sasa_change(sasa_frac_structA)
+    PISA_SASA_structB = bin_sasa_change(sasa_frac_structB)
+    return PISA_SASA_structA, PISA_SASA_structB
 
 
 def _table_df(resis, resSeqs, atoms, counts, iis):
@@ -468,51 +484,111 @@ class Contacts():
 
     Attributes
     ----------
-    struct0 : md.Trajectory,
+    structA : md.Trajectory,
         First structure for computing contacts.
-    struct1 : md.Trajectory,
+    structB : md.Trajectory,
         Second structure for computing contacts.
-    name0 : str, default='struct0',
+    nameA : str, default='structA',
         Name of the first structure for computing contacts.
-    name1 : str, default='struct1',
+    nameB : str, default='structB',
         Name of the second structure for computing contacts.
     pairs : nd.array, shape=(n_contact_pairs, 2),
         List of named contact pairs.
     counts : nd.array, shape=(n_contact_pairs, 2),
         Number of observed contacts per pair.
-    unique0 : nd.array, shape=(n_contact_pairs, ),
+    uniqueA : nd.array, shape=(n_contact_pairs, ),
         Unique names of contacts on structure 1.
-    counts0 : nd.array, shape=(n_contact_pairs, ),
+    countsA : nd.array, shape=(n_contact_pairs, ),
         Number of contacts for each pair on structure 1.
-    unique1 : nd.array, shape=(n_contact_pairs, ),
+    uniqueB : nd.array, shape=(n_contact_pairs, ),
         Unique names of contacts on structure 2.
-    counts1 : nd.array, shape=(n_contact_pairs, ),
+    countsB : nd.array, shape=(n_contact_pairs, ),
         Number of contacts for each pair on structure 2.
     """
-    def __init__(self, struct0, struct1, name0='struct0', name1='struct1', **kwargs):
-        self.struct0 = struct0
-        self.struct1 = struct1
+    def __init__(self, structA, structB, nameA='structA', nameB='structB', **kwargs):
+        self.structA = structA
+        self.structB = structB
 
-        self.name0 = name0
-        self.name1 = name1
+        
+
+        self.nameA = nameA
+        self.nameB = nameB
 
         self.pairs = None
         self.counts = None
 
-        self.unique0 = None
-        self.counts0 = None
+        self.uniqueA = None
+        self.countsA = None
+        self.resSeqsA = None
 
-        self.unique1 = None
-        self.counts1 = None
+        self.uniqueB = None
+        self.countsB = None
+        self.resSeqsB = None
+
+
+    @property
+    def _res_namesA(self):
+        return np.array([r.name for r in self.structA.top.residues])
+
+    @property
+    def _res_namesB(self):
+        return np.array([r.name for r in self.structB.top.residues])
+
+    @property
+    def _resSeqsA(self):
+        return np.array([r.resSeq for r in self.structA.top.residues])
+
+    @property
+    def _resSeqsB(self):
+        return np.array([r.resSeq for r in self.structB.top.residues])
+
+    @property
+    def resi_contactsA(self):
+        if self.resSeqsA is None:
+            resi_contactsA = None
+        else:
+            resi_contactsA = np.unique(
+                [
+                    np.where(self._resSeqsA == r)[0]
+                    for r in self.resSeqsA]).flatten()
+        return resi_contactsA
+
+    @property
+    def resi_contactsB(self):
+        if self.resSeqsB is None:
+            resi_contactsB = None
+        else:
+            resi_contactsB = np.unique(
+                [
+                    np.where(self._resSeqsB == r)[0]
+                    for r in self.resSeqsB]).flatten()
+        return resi_contactsB
+
+    @property
+    def resSeq_contactsA(self):
+        if self.resSeqsA is None:
+            resSeq_contactsA = None
+        else:
+            resSeq_contactsA = np.unique(self.resSeqsA)
+        return resSeq_contactsA
+
+    @property
+    def resSeq_contactsB(self):
+        if self.resSeqsB is None:
+            resSeq_contactsB = None
+        else:
+            resSeq_contactsB = np.unique(self.resSeqsB)
+        return resSeq_contactsB
+
 
     def count_contacts(self, **kwargs):
-        """Compute contacts between struct0 and struct1.
+        """Compute contacts between structA and structB.
 
         Inputs
         ----------
-        struct0 : md.Trajectory,
+        structA : md.Trajectory,
             The first structure to use for calculating close contacts.
-        struct1 : md.Trajectory,
+        structB : md.Trajectory,
             The second structure to use for calculating close contacts.
         criterion : str, choices=['VDW', 'dist'], default='VDW',
             Criterion for determining close contacts, either as a fraction
@@ -532,17 +608,30 @@ class Contacts():
             Option for computing granularity of contacts. Can count based
             on residues or per atom pair.
         """
-        self.pairs, self.counts = pairwise_contacts(self.struct0, self.struct1, **kwargs)
+        self.pairs, self.counts = pairwise_contacts(self.structA, self.structB, **kwargs)
 
-        self.unique0 = np.unique(self.pairs[:,0])
-        self.unique1 = np.unique(self.pairs[:,1])
-        self.counts0 = np.array(
-            [np.sum(self.counts[self.pairs[:,0] == u]) for u in self.unique0])
-        self.counts1 = np.array(
-            [np.sum(self.counts[self.pairs[:,1] == u]) for u in self.unique1])
+        self.uniqueA = np.unique(self.pairs[:,0])
+        self.uniqueB = np.unique(self.pairs[:,1])
+        self.countsA = np.array(
+            [np.sum(self.counts[self.pairs[:,0] == u]) for u in self.uniqueA])
+        self.countsB = np.array(
+            [np.sum(self.counts[self.pairs[:,1] == u]) for u in self.uniqueB])
+ 
+        if self.uniqueA.shape[0] == 0 and self.uniqueB.shape[0] == 0:
+            self.res_namesA = None
+            self.resSeqsA = None
+            self.atomsA = None
+            self.res_namesB = None
+            self.resSeqsB = None
+            self.atomsB = None
+        else: 
+            # separate residue identity, number, and atom name (if applicable)
+            self.res_namesA, self.resSeqsA, self.atomsA = _parse_residues(self.uniqueA)
+            self.res_namesB, self.resSeqsB, self.atomsB = _parse_residues(self.uniqueB)
+
 
     def __repr__(self):
-        out = "Contacts(%s, %s)" % (self.name0, self.name1)
+        out = "Contacts(%s, %s)" % (self.nameA, self.nameB)
         return out
 
     def output(self, mode='table', residues='block', sort=True, **kwargs):
@@ -560,70 +649,72 @@ class Contacts():
             Optionally sort by residue numbers.
         """
         # compute contacts if they don't exist
-        if self.unique0 is None or self.counts0 is None:
+        if self.uniqueA is None or self.countsA is None:
             self.count_contacts(**kwargs)
+
+        if self.uniqueA.shape[0] == 0:
+            print("No contacts")
+            return
 
         # assert proper choices
         assert residues in ['block', 'fancy', 'single']
 
-        # separate residue identity, number, and atom name (if applicable)
-        resis0, resSeqs0, atoms0 = _parse_residues(self.unique0)
-        resis1, resSeqs1, atoms1 = _parse_residues(self.unique1)
-
         # optionally sort by residue number
         if sort:
-            iis0 = np.argsort(resSeqs0)
-            iis1 = np.argsort(resSeqs1)
+            iisA = np.argsort(self.resSeqsA)
+            iisB = np.argsort(self.resSeqsB)
         else:
-            iis0 = np.arange(resSeqs0.shape[0])
-            iis1 = np.arange(resSeqs1.shape[0])
+            iisA = np.arange(self.resSeqsA.shape[0])
+            iisB = np.arange(self.resSeqsB.shape[0])
 
         # update residue names from block to either fancy or single letter
         # i.e. TYR -> Tyr -> Y
         if residues == 'fancy':
-            resis0 = np.array([convert_map_fancy[l] for l in resis0])
-            resis1 = np.array([convert_map_fancy[l] for l in resis1])
+            res_namesA = np.array([convert_map_fancy[l] for l in self.res_namesA])
+            res_namesB = np.array([convert_map_fancy[l] for l in self.res_namesB])
         elif residues == 'single':
-            resis0 = np.array([convert_map_single[l] for l in resis0])
-            resis1 = np.array([convert_map_single[l] for l in resis1])
+            res_namesA = np.array([convert_map_single[l] for l in self.res_namesA])
+            res_namesB = np.array([convert_map_single[l] for l in self.res_namesB])
+        else:
+            res_namesA = self.res_namesA
+            res_namesB = self.res_namesB
         
         # print contacts as a pandas table
         if mode == 'table':
-            df0 = _table_df(resis0, resSeqs0, atoms0, self.counts0, iis0)
-            df1 = _table_df(resis1, resSeqs1, atoms1, self.counts1, iis1)
+            df0 = _table_df(res_namesA, self.resSeqsA, self.atomsA, self.countsA, iisA)
+            df1 = _table_df(res_namesB, self.resSeqsB, self.atomsB, self.countsB, iisB)
 
             print(
                 "".join(
                     [
-                        "%s\n" % self.name0,
+                        "%s\n" % self.nameA,
                         repr(df0),
-                        "\n\n%s\n" % self.name1,
+                        "\n\n%s\n" % self.nameB,
                         repr(df1)]))
 
         # print contacts as a fancy list (Residue, number, num_contacts
         # -> i.e. Tyr64(4))
         elif mode == 'fancy':
-            fancy_out0 = _fancy_df(resis0, resSeqs0, atoms0, self.counts0, iis0)
-            fancy_out1 = _fancy_df(resis1, resSeqs1, atoms1, self.counts1, iis1)
+            fancy_out0 = _fancy_df(res_namesA, self.resSeqsA, self.atomsA, self.countsA, iisA)
+            fancy_out1 = _fancy_df(res_namesB, self.resSeqsB, self.atomsB, self.countsB, iisB)
             
             print(
                 "".join(
                     [
-                        "%s\n" % self.name0,
+                        "%s\n" % self.nameA,
                         fancy_out0,
-                        "\n\n%s\n" % self.name1,
+                        "\n\n%s\n" % self.nameB,
                         fancy_out1]))
 
         # print contacts in a form to easily copy and past into chimerax
         # (comma separated)
         elif mode == 'chimerax':
-            print(resis0, resSeqs0, resis1, resSeqs1)
             chimerax_out = "".join(
                 [
-                    "%s\n" % self.name0,
-                    ", ".join(np.array(resSeqs0[iis0],dtype=str)),
-                    "\n\n%s\n" % self.name1,
-                    ", ".join(np.array(resSeqs1[iis1], dtype=str))])
+                    "%s\n" % self.nameA,
+                    ", ".join(np.array(resSeqsA[iisA],dtype=str)),
+                    "\n\n%s\n" % self.nameB,
+                    ", ".join(np.array(resSeqsB[iisB], dtype=str))])
             print(chimerax_out)
                 
         # print contacts in a form to easily copy and paste into pymol
@@ -631,8 +722,8 @@ class Contacts():
         elif mode == 'pymol':
             pymol_out = "".join(
                 [
-                    "%s\n" % self.name0,
-                    "+".join(np.array(resSeqs0[iis0],dtype=str)),
-                    "\n\n%s\n" % self.name1,
-                    "+".join(np.array(resSeqs1[iis1],dtype=str))])
+                    "%s\n" % self.nameA,
+                    "+".join(np.array(self.resSeqsA[iisA],dtype=str)),
+                    "\n\n%s\n" % self.nameB,
+                    "+".join(np.array(self.resSeqsB[iisB],dtype=str))])
             print(pymol_out)
