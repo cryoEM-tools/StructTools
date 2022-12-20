@@ -537,9 +537,9 @@ class Contacts():
         self.unique0 = np.unique(self.pairs[:,0])
         self.unique1 = np.unique(self.pairs[:,1])
         self.counts0 = np.array(
-            [np.sum(self.pairs[:,0] == u) for u in self.unique0])
+            [np.sum(self.counts[self.pairs[:,0] == u]) for u in self.unique0])
         self.counts1 = np.array(
-            [np.sum(self.pairs[:,1] == u) for u in self.unique1])
+            [np.sum(self.counts[self.pairs[:,1] == u]) for u in self.unique1])
 
     def __repr__(self):
         out = "Contacts(%s, %s)" % (self.name0, self.name1)
