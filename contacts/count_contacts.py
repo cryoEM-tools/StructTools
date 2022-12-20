@@ -193,6 +193,29 @@ def pairwise_contacts(
         atoms='all', mode='residue'):
     """List out all pairwise contacts between struct0 and struct 1
 
+    Inputs
+    ----------
+    struct0 : md.Trajectory,
+        The first structure to use for calculating close contacts.
+    struct1 : md.Trajectory,
+        The second structure to use for calculating close contacts.
+    criterion : str, choices=['VDW', 'dist'], default='VDW',
+        Criterion for determining close contacts, either as a fraction
+        of the van der Waals radii, or within a particular distance.
+    VDW_dist : float, default=1.4,
+        The fraction of van der Waals radii to use as a cutoff for
+        determining close-contacts. i.e. considered a contact if a
+        distance pair is less than 1.4x the sum of the van der Waals
+        radii (default).
+    dist_cutoff : float, default=0.39,
+        The distance cutoff for determining a close-contact. Default is
+        set to 0.39 nm.
+    atoms : str, choices=['all', 'heavy'], default='all',
+        Atoms to include for close contacts, 'all', or 'heavy'. Use all
+        atoms or only heavy atoms.
+    mode : str, choices=['residue', 'atom'], default='residue',
+        Option for computing granularity of contacts. Can count based
+        on residues or per atom pair.
     """
     
     # get pairwise distance matrix
@@ -397,9 +420,75 @@ def count_PISA_contacts(struct0, struct1, **kwargs):
     return PISA_SASA_struct0, PISA_SASA_struct1
 
 
+def _table_df(resis, resSeqs, atoms, counts, iis):
+    if atoms is not None:
+        df_resis = np.array(
+            ['%s%s-%s' % (aa,num,atom) for aa,num,atom in zip(resis, resSeqs, atoms)])
+    else:
+        df_resis = np.array(
+            ['%s%s' % (aa,num) for aa,num in zip(resis, resSeqs)])
+    df = pandas.DataFrame(
+        {
+            'residues' : df_resis[iis],
+            'counts' : counts[iis]
+        })
+    return df
+
+
+def _fancy_df(resis, resSeqs, atoms, counts, iis):
+    if atoms is not None:
+        fancy_data = zip(resis[iis], resSeqs[iis], atoms, counts[iis])
+        fancy_out = ", ".join(
+            [
+                '%s%s-%s(%d)' % (aa,num,atom,contacts)
+                for aa,num,atom,contacts in fancy_data])
+    else:
+        fancy_data = zip(resis[iis], resSeqs[iis], counts[iis])
+        fancy_out = ", ".join(
+            [
+                '%s%s(%d)' % (aa,num,contacts)
+                for aa,num,contacts in fancy_data])
+    return fancy_out
+
+
+def _parse_residues(unique_resis):
+    resis = np.array([str(s[:3]) for s in unique_resis])
+    splits = np.array([s[3:].split("-") for s in unique_resis])
+    if splits.shape[1] == 2:
+        atoms = np.array([str(s[3:].split("-")[1]) for s in unique_resis])
+        resSeqs = np.array([int(s[3:].split("-")[0]) for s in unique_resis])
+    else:
+        atoms = None
+        resSeqs = np.array([int(s[3:]) for s in unique_resis])
+    return resis, resSeqs, atoms
+
 
 class Contacts():
+    """Class for computing and analyzing protein-protein contacts.
 
+    Attributes
+    ----------
+    struct0 : md.Trajectory,
+        First structure for computing contacts.
+    struct1 : md.Trajectory,
+        Second structure for computing contacts.
+    name0 : str, default='struct0',
+        Name of the first structure for computing contacts.
+    name1 : str, default='struct1',
+        Name of the second structure for computing contacts.
+    pairs : nd.array, shape=(n_contact_pairs, 2),
+        List of named contact pairs.
+    counts : nd.array, shape=(n_contact_pairs, 2),
+        Number of observed contacts per pair.
+    unique0 : nd.array, shape=(n_contact_pairs, ),
+        Unique names of contacts on structure 1.
+    counts0 : nd.array, shape=(n_contact_pairs, ),
+        Number of contacts for each pair on structure 1.
+    unique1 : nd.array, shape=(n_contact_pairs, ),
+        Unique names of contacts on structure 2.
+    counts1 : nd.array, shape=(n_contact_pairs, ),
+        Number of contacts for each pair on structure 2.
+    """
     def __init__(self, struct0, struct1, name0='struct0', name1='struct1', **kwargs):
         self.struct0 = struct0
         self.struct1 = struct1
@@ -416,12 +505,35 @@ class Contacts():
         self.unique1 = None
         self.counts1 = None
 
-    def compute_pairwise_contacts(self, **kwargs):
+    def count_contacts(self, **kwargs):
+        """Compute contacts between struct0 and struct1.
+
+        Inputs
+        ----------
+        struct0 : md.Trajectory,
+            The first structure to use for calculating close contacts.
+        struct1 : md.Trajectory,
+            The second structure to use for calculating close contacts.
+        criterion : str, choices=['VDW', 'dist'], default='VDW',
+            Criterion for determining close contacts, either as a fraction
+            of the van der Waals radii, or within a particular distance.
+        VDW_dist : float, default=1.4,
+            The fraction of van der Waals radii to use as a cutoff for
+            determining close-contacts. i.e. considered a contact if a
+            distance pair is less than 1.4x the sum of the van der Waals
+            radii (default).
+        dist_cutoff : float, default=0.39,
+            The distance cutoff for determining a close-contact. Default is
+            set to 0.39 nm.
+        atoms : str, choices=['all', 'heavy'], default='all',
+            Atoms to include for close contacts, 'all', or 'heavy'. Use all
+            atoms or only heavy atoms.
+        mode : str, choices=['residue', 'atom'], default='residue',
+            Option for computing granularity of contacts. Can count based
+            on residues or per atom pair.
+        """
         self.pairs, self.counts = pairwise_contacts(self.struct0, self.struct1, **kwargs)
 
-    def bincount_contacts(self, **kwargs):
-        if self.pairs is None or self.counts is None:
-            self.compute_pairwise_contacts(**kwargs)
         self.unique0 = np.unique(self.pairs[:,0])
         self.unique1 = np.unique(self.pairs[:,1])
         self.counts0 = np.array(
@@ -434,30 +546,31 @@ class Contacts():
         return out
 
     def output(self, mode='table', residues='block', sort=True, **kwargs):
-
+        """Output control for contacts
+        
+        Inputs
+        ----------
+        mode : str, choices=['table','fancy','chimerax','pymol']
+            Output styles are either as a pandas table, a fancy string,
+            or as a quick input to visualize in chimerax or pymol.
+        residues : str, choices=['block','fancy','single'], default='block',
+            Output control for representation of residues, i.e. TYR, Tyr, Y
+            for block, fancy, and single, respectively.
+        sort : bool, default=True,
+            Optionally sort by residue numbers.
+        """
+        # compute contacts if they don't exist
         if self.unique0 is None or self.counts0 is None:
-            self.bincount_contacts(**kwargs)
+            self.count_contacts(**kwargs)
 
+        # assert proper choices
         assert residues in ['block', 'fancy', 'single']
 
-        resis0 = np.array([str(s[:3]) for s in self.unique0])
-        splits0 = np.array([s[3:].split("-") for s in self.unique0])
-        if splits0.shape[1] == 2:
-            atoms0 = np.array([str(s[3:].split("-")[1]) for s in self.unique0])
-            resSeqs0 = np.array([int(s[3:].split("-")[0]) for s in self.unique0])
-        else:
-            atoms0 = None
-            resSeqs0 = np.array([int(s[3:]) for s in self.unique0])
+        # separate residue identity, number, and atom name (if applicable)
+        resis0, resSeqs0, atoms0 = _parse_residues(self.unique0)
+        resis1, resSeqs1, atoms1 = _parse_residues(self.unique1)
 
-        resis1 = np.array([str(s[:3]) for s in self.unique1])
-        splits1 = np.array([s[3:].split("-") for s in self.unique1])
-        if splits1.shape[1] == 2:
-            atoms1 = np.array([str(s[3:].split("-")[1]) for s in self.unique1])
-            resSeqs1 = np.array([int(s[3:].split("-")[0]) for s in self.unique1])
-        else:
-            atoms1 = None
-            resSeqs1 = np.array([int(s[3:]) for s in self.unique1])
-
+        # optionally sort by residue number
         if sort:
             iis0 = np.argsort(resSeqs0)
             iis1 = np.argsort(resSeqs1)
@@ -465,37 +578,19 @@ class Contacts():
             iis0 = np.arange(resSeqs0.shape[0])
             iis1 = np.arange(resSeqs1.shape[0])
 
+        # update residue names from block to either fancy or single letter
+        # i.e. TYR -> Tyr -> Y
         if residues == 'fancy':
             resis0 = np.array([convert_map_fancy[l] for l in resis0])
             resis1 = np.array([convert_map_fancy[l] for l in resis1])
         elif residues == 'single':
             resis0 = np.array([convert_map_single[l] for l in resis0])
             resis1 = np.array([convert_map_single[l] for l in resis1])
-            
+        
+        # print contacts as a pandas table
         if mode == 'table':
-            if atoms0 is not None:
-                df_resis0 = np.array(
-                    ['%s%s-%s' % (aa,num,atom) for aa,num,atom in zip(resis0, resSeqs0, atoms0)])
-            else:
-                df_resis0 = np.array(
-                    ['%s%s' % (aa,num) for aa,num in zip(resis0, resSeqs0)])
-            df0 = pandas.DataFrame(
-                {
-                    'residues' : df_resis0[iis0],
-                    'counts' : self.counts0[iis0]
-                })
-
-            if atoms1 is not None:
-                df_resis1 = np.array(
-                    ['%s%s-%s' % (aa,num,atom) for aa,num,atom in zip(resis1, resSeqs1, atoms1)])
-            else:
-                df_resis1 = np.array(
-                    ['%s%s' % (aa,num) for aa,num in zip(resis1, resSeqs1)])
-            df1 = pandas.DataFrame(
-                {
-                    'residues' : df_resis1[iis1],
-                    'counts' : self.counts1[iis1]
-                })
+            df0 = _table_df(resis0, resSeqs0, atoms0, self.counts0, iis0)
+            df1 = _table_df(resis1, resSeqs1, atoms1, self.counts1, iis1)
 
             print(
                 "".join(
@@ -505,33 +600,12 @@ class Contacts():
                         "\n\n%s\n" % self.name1,
                         repr(df1)]))
 
-
+        # print contacts as a fancy list (Residue, number, num_contacts
+        # -> i.e. Tyr64(4))
         elif mode == 'fancy':
-            if atoms0 is not None:
-                fancy_data0 = zip(resis0[iis0], resSeqs0[iis0], atoms0, self.counts0[iis0])
-                fancy_out0 = ", ".join(
-                    [
-                        '%s%s-%s(%d)' % (aa,num,atom,contacts)
-                        for aa,num,atom,contacts in fancy_data0])
-            else:
-                fancy_data0 = zip(resis0[iis0], resSeqs0[iis0], self.counts0[iis0])
-                fancy_out0 = ", ".join(
-                    [
-                        '%s%s(%d)' % (aa,num,contacts)
-                        for aa,num,contacts in fancy_data0])
-
-            if atoms1 is not None:
-                fancy_data1 = zip(resis1[iis1], resSeqs1[iis1], atoms1, self.counts1[iis1])
-                fancy_out1 = ", ".join(
-                    [
-                        '%s%s-%s(%d)' % (aa,num,atom,contacts)
-                        for aa,num,atom,contacts in fancy_data1])
-            else:
-                fancy_data1 = zip(resis1[iis1], resSeqs1[iis1], self.counts1[iis1])
-                fancy_out1 = ", ".join(
-                    [
-                        '%s%s(%d)' % (aa,num,contacts)
-                        for aa,num,contacts in fancy_data1])
+            fancy_out0 = _fancy_df(resis0, resSeqs0, atoms0, self.counts0, iis0)
+            fancy_out1 = _fancy_df(resis1, resSeqs1, atoms1, self.counts1, iis1)
+            
             print(
                 "".join(
                     [
@@ -540,6 +614,8 @@ class Contacts():
                         "\n\n%s\n" % self.name1,
                         fancy_out1]))
 
+        # print contacts in a form to easily copy and past into chimerax
+        # (comma separated)
         elif mode == 'chimerax':
             print(resis0, resSeqs0, resis1, resSeqs1)
             chimerax_out = "".join(
@@ -550,6 +626,8 @@ class Contacts():
                     ", ".join(np.array(resSeqs1[iis1], dtype=str))])
             print(chimerax_out)
                 
+        # print contacts in a form to easily copy and paste into pymol
+        # (separated with a +)
         elif mode == 'pymol':
             pymol_out = "".join(
                 [
