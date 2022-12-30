@@ -2,7 +2,7 @@ import itertools
 import mdtraj as md
 import numpy as np
 import pandas
-
+from enspara import ra
 
 
 convert_map_single_letter = {
@@ -18,24 +18,30 @@ convert_map_fancy = {
     'LYS' : 'Lys', 'PHE' : 'Phe', 'SER' : 'Ser', 'TRP' : 'Trp', 'VAL' : 'Val'}
 
 
+class color:
+   BOLD = '\033[1m'
+   UNDERLINE = '\033[4m'
+   END = '\033[0m'
 
 def pairwise_dists(structA, structB):
     """calculate pairwise distances between atoms in two structures.
 
     Inputs
     ----------
-    structA : md.Trajectory
+    structA : md.Trajectory,
         First structure for calculating pairwise distances.
-    structB : md.Trajectory
+    structB : md.Trajectory,
 
     Returns
     ----------
-    dists : nd.array, shape=(n_states_structA, n_states_structB),
+    dists : nd.array, shape=(n_frames, n_states_structA, n_states_structB),
         Pairwise distances between struct 0 and 1. i,j corresponds to distance
         between ith atom in structA and jth atom in structB.
     """
-    diffs = np.abs(structA.xyz[0][:,None,:] - structB.xyz[0])
-    dists = np.sqrt(np.einsum('ijk,ijk->ij', diffs, diffs))
+    assert structA.xyz.shape[0] == structB.xyz.shape[0]
+    diffs = np.abs(
+        [xyzA[:,None,:] - xyzB for xyzA,xyzB in zip(structA.xyz, structB.xyz)])
+    dists = np.sqrt(np.einsum('ijkl,ijkl->ijk', diffs, diffs))
     return dists
 
 
@@ -265,7 +271,8 @@ def pairwise_contacts(
 
         n_resisA = len(resi_iis_structA)
         n_resisB = len(resi_iis_structB)
-        contacts_mask_residues = np.zeros((n_resisA, n_resisB), dtype=int)
+        contacts_mask_residues = np.zeros(
+            (structA.n_frames, n_resisA, n_resisB), dtype=int)
         for i in np.arange(n_resisA):
             for j in np.arange(n_resisB):
                 x,y = np.array(
@@ -273,12 +280,20 @@ def pairwise_contacts(
                         itertools.product(
                             resi_iis_structA[i],
                             resi_iis_structB[j]))).T
-                contacts_mask_residues[i,j] = contacts_mask[x,y].sum()
+                contacts_mask_residues[:,i,j] = contacts_mask[:,x,y].sum(axis=1)
         iis_contacts = np.where(contacts_mask_residues > 0)
         n_contacts = contacts_mask_residues[iis_contacts]
 
-    contact_pairs = np.vstack(
-        [names0[iis_contacts[0]], names1[iis_contacts[1]]]).T
+    if n_contacts.shape[0] > 0:
+        lengths = np.bincount(iis_contacts[0], minlength=pairwise_dist_mat.shape[0])
+        n_contacts = ra.RaggedArray(n_contacts, lengths=lengths)
+
+        named_pairs = np.vstack(
+            [names0[iis_contacts[1]], names1[iis_contacts[2]]]).T
+        contact_pairs = ra.RaggedArray(named_pairs, lengths=lengths)
+    else:
+        contact_pairs = None
+        n_contacts = None
 
     return contact_pairs, n_contacts
 
@@ -436,7 +451,7 @@ def count_PISA_contacts(structA, structB, **kwargs):
     return PISA_SASA_structA, PISA_SASA_structB
 
 
-def _table_df(resis, resSeqs, atoms, counts, iis):
+def _table_df(resis, resSeqs, atoms, counts):
     if atoms is not None:
         df_resis = np.array(
             ['%s%s-%s' % (aa,num,atom) for aa,num,atom in zip(resis, resSeqs, atoms)])
@@ -445,21 +460,21 @@ def _table_df(resis, resSeqs, atoms, counts, iis):
             ['%s%s' % (aa,num) for aa,num in zip(resis, resSeqs)])
     df = pandas.DataFrame(
         {
-            'residues' : df_resis[iis],
-            'counts' : counts[iis]
+            'residues' : df_resis,
+            'counts' : counts
         })
     return df
 
 
-def _fancy_df(resis, resSeqs, atoms, counts, iis):
+def _fancy_df(resis, resSeqs, atoms, counts):
     if atoms is not None:
-        fancy_data = zip(resis[iis], resSeqs[iis], atoms, counts[iis])
+        fancy_data = zip(resis, resSeqs, atoms, counts)
         fancy_out = ", ".join(
             [
                 '%s%s-%s(%d)' % (aa,num,atom,contacts)
                 for aa,num,atom,contacts in fancy_data])
     else:
-        fancy_data = zip(resis[iis], resSeqs[iis], counts[iis])
+        fancy_data = zip(resis, resSeqs, counts)
         fancy_out = ", ".join(
             [
                 '%s%s(%d)' % (aa,num,contacts)
@@ -477,6 +492,12 @@ def _parse_residues(unique_resis):
         atoms = None
         resSeqs = np.array([int(s[3:]) for s in unique_resis])
     return resis, resSeqs, atoms
+
+
+def _add_spacing(data, to_add=''):
+    split_data = data.split("\n")
+    spaced_split_data = ['%s%s' % (to_add,dat) for dat in split_data]
+    return "\n".join(spaced_split_data)
 
 
 class Contacts():
@@ -509,7 +530,8 @@ class Contacts():
         self.structA = structA
         self.structB = structB
 
-        
+        assert self.structA.n_frames == self.structB.n_frames
+        self.n_confs = self.structA.n_frames
 
         self.nameA = nameA
         self.nameB = nameB
@@ -569,7 +591,8 @@ class Contacts():
         if self.resSeqsA is None:
             resSeq_contactsA = None
         else:
-            resSeq_contactsA = np.unique(self.resSeqsA)
+            resSeq_contactsA = ra.RaggedArray(
+                [np.unique(resSeqs) for resSeqs in self.resSeqsA])
         return resSeq_contactsA
 
     @property
@@ -577,7 +600,8 @@ class Contacts():
         if self.resSeqsB is None:
             resSeq_contactsB = None
         else:
-            resSeq_contactsB = np.unique(self.resSeqsB)
+            resSeq_contactsB = ra.RaggedArray(
+                [np.unique(resSeqs) for resSeqs in self.resSeqsB])
         return resSeq_contactsB
 
 
@@ -610,31 +634,116 @@ class Contacts():
         """
         self.pairs, self.counts = pairwise_contacts(self.structA, self.structB, **kwargs)
 
-        self.uniqueA = np.unique(self.pairs[:,0])
-        self.uniqueB = np.unique(self.pairs[:,1])
-        self.countsA = np.array(
-            [np.sum(self.counts[self.pairs[:,0] == u]) for u in self.uniqueA])
-        self.countsB = np.array(
-            [np.sum(self.counts[self.pairs[:,1] == u]) for u in self.uniqueB])
- 
-        if self.uniqueA.shape[0] == 0 and self.uniqueB.shape[0] == 0:
-            self.res_namesA = None
-            self.resSeqsA = None
-            self.atomsA = None
-            self.res_namesB = None
-            self.resSeqsB = None
-            self.atomsB = None
-        else: 
-            # separate residue identity, number, and atom name (if applicable)
-            self.res_namesA, self.resSeqsA, self.atomsA = _parse_residues(self.uniqueA)
-            self.res_namesB, self.resSeqsB, self.atomsB = _parse_residues(self.uniqueB)
+        # initialize variables
+        uniqueA, countsA = [], []
+        uniqueB, countsB = [], []
+        res_namesA, resSeqsA, atomsA = [], [], []
+        res_namesB, resSeqsB, atomsB = [], [], []
+
+        # iterate through conformation contact info
+        for n in np.arange(self.pairs.shape[0]):
+
+            # find unique contact names for structures A and B
+            uniqueA_tmp = np.unique(self.pairs[n][:,0])
+            uniqueB_tmp = np.unique(self.pairs[n][:,1])
+
+            # count the contacts for each unique name
+            countsA_tmp = np.array(
+                [
+                    np.sum(self.counts[n][self.pairs[n][:,0] == u])
+                    for u in uniqueA_tmp])
+            countsB_tmp = np.array(
+                [
+                    np.sum(self.counts[n][self.pairs[n][:,1] == u])
+                     for u in uniqueB_tmp])
+
+            # if there are contacts, parse residue info (i.e.
+            # ASN120-CA -> res_name = 'ASN', resSeq = 120, atom = 'CA')
+            if uniqueA_tmp.shape[0] > 0:
+                res_namesA_tmp, resSeqsA_tmp, atomsA_tmp = _parse_residues(
+                    uniqueA_tmp)
+                res_namesB_tmp, resSeqsB_tmp, atomsB_tmp = _parse_residues(
+                    uniqueB_tmp)
+            # if no contacts, return empty lists
+            else:
+                res_namesA_tmp, resSeqsA_tmp, atomsA_tmp = [],[],[]
+                res_namesB_tmp, resSeqsB_tmp, atomsB_tmp = [],[],[]
+
+            # sort based on residue numbers and append data to lists
+            iisA = np.argsort(resSeqsA_tmp)
+            if iisA.shape[0] > 0:
+                uniqueA.append(uniqueA_tmp[iisA])
+                countsA.append(
+                    np.array(countsA_tmp[iisA], dtype=int))
+                res_namesA.append(res_namesA_tmp[iisA])
+                resSeqsA.append(
+                    np.array(resSeqsA_tmp[iisA],dtype=int))
+            else:
+                uniqueA.append(uniqueA_tmp)
+                countsA.append(
+                    np.array(countsA_tmp, dtype=int))
+                res_namesA.append(res_namesA_tmp)
+                resSeqsA.append(
+                    np.array(resSeqsA_tmp,dtype=int))
+
+            iisB = np.argsort(resSeqsB_tmp)
+            if iisB.shape[0] > 0:
+                uniqueB.append(uniqueB_tmp[iisB])
+                countsB.append(
+                    np.array(countsB_tmp[iisB], dtype=int))
+                res_namesB.append(res_namesB_tmp[iisB])
+                resSeqsB.append(
+                    np.array(resSeqsB_tmp[iisB], dtype=int))
+            else:
+                uniqueB.append(uniqueB_tmp)
+                countsB.append(
+                    np.array(countsB_tmp, dtype=int))
+                res_namesB.append(res_namesB_tmp)
+                resSeqsB.append(
+                    np.array(resSeqsB_tmp,dtype=int))
+
+            # try to sort atom names. if it doesnt work, its probably because
+            # atoms don't exist (are `None`), so just add as is
+            try:
+                atomsA.append(atomsA_tmp[iisA])
+                atomsB.append(atomsB_tmp[iisB])
+            except:
+                atomsA.append([atomsA_tmp]*iisA.shape[0])
+                atomsB.append([atomsB_tmp]*iisB.shape[0])
+
+        # make ragged arrays of each data item
+        self.uniqueA = ra.RaggedArray(uniqueA)
+        self.uniqueB = ra.RaggedArray(uniqueB)
+        self.countsA = ra.RaggedArray(countsA)
+        self.countsB = ra.RaggedArray(countsB)
+        self.res_namesA = ra.RaggedArray(res_namesA)
+        self.resSeqsA = ra.RaggedArray(resSeqsA)
+        self.res_namesB = ra.RaggedArray(res_namesB)
+        self.resSeqsB = ra.RaggedArray(resSeqsB)
+
+        # try to make a ragged array of atoms
+        # this will likely fail if there are no atoms AND some pairs have no contacts
+        # so in that case, just add a bunch of `None`s
+        try:
+            self.atomsA = ra.RaggedArray(atomsA)
+            self.atomsB = ra.RaggedArray(atomsB)
+        except:
+            self.atomsA = [None]*res_namesA.shape[0]#ra.RaggedArray(
+              #  [None]*res_namesA._data.shape[0], lengths=res_namesA.lengths)
+            self.atomsB = [None]*res_namesA.shape[0]#ra.RaggedArray(
+               # [None]*res_namesB._data.shape[0], lengths=res_namesB.lengths)
+
+        if np.all(None == self.atomsA._data):
+            self.atomsA = np.array([None]*self.atomsA.shape[0])
+        if np.all(None == self.atomsB._data):
+            self.atomsB = np.array([None]*self.atomsB.shape[0])
 
 
     def __repr__(self):
         out = "Contacts(%s, %s)" % (self.nameA, self.nameB)
         return out
 
-    def output(self, mode='table', residues='block', sort=True, **kwargs):
+    def output(self, mode='table', residues='block', frames=0, **kwargs):
         """Output control for contacts
         
         Inputs
@@ -645,85 +754,98 @@ class Contacts():
         residues : str, choices=['block','fancy','single'], default='block',
             Output control for representation of residues, i.e. TYR, Tyr, Y
             for block, fancy, and single, respectively.
-        sort : bool, default=True,
-            Optionally sort by residue numbers.
+        frames : array-like, default=1,
+            Number of frames to report.
         """
+        if type(frames) is int:
+            frames = np.array([frames])
+        
         # compute contacts if they don't exist
         if self.uniqueA is None or self.countsA is None:
             self.count_contacts(**kwargs)
 
-        if self.uniqueA.shape[0] == 0:
-            print("No contacts")
-            return
+        spacing  = '    '
 
-        # assert proper choices
-        assert residues in ['block', 'fancy', 'single']
+        for frame in frames:
+            print("Frame: %d" % frame)
 
-        # optionally sort by residue number
-        if sort:
-            iisA = np.argsort(self.resSeqsA)
-            iisB = np.argsort(self.resSeqsB)
-        else:
-            iisA = np.arange(self.resSeqsA.shape[0])
-            iisB = np.arange(self.resSeqsB.shape[0])
+            if self.uniqueA[frame].shape[0] == 0:
+                print("%sNo contacts\n\n" % spacing)
+                continue
 
-        # update residue names from block to either fancy or single letter
-        # i.e. TYR -> Tyr -> Y
-        if residues == 'fancy':
-            res_namesA = np.array([convert_map_fancy[l] for l in self.res_namesA])
-            res_namesB = np.array([convert_map_fancy[l] for l in self.res_namesB])
-        elif residues == 'single':
-            res_namesA = np.array([convert_map_single[l] for l in self.res_namesA])
-            res_namesB = np.array([convert_map_single[l] for l in self.res_namesB])
-        else:
-            res_namesA = self.res_namesA
-            res_namesB = self.res_namesB
+            # assert proper choices
+            assert residues in ['block', 'fancy', 'single']
+    
+            # update residue names from block to either fancy or single letter
+            # i.e. TYR -> Tyr -> Y
+            if residues == 'fancy':
+                res_namesA = np.array([convert_map_fancy[l] for l in self.res_namesA[frame]])
+                res_namesB = np.array([convert_map_fancy[l] for l in self.res_namesB[frame]])
+            elif residues == 'single':
+                res_namesA = np.array([convert_map_single[l] for l in self.res_namesA[frame]])
+                res_namesB = np.array([convert_map_single[l] for l in self.res_namesB[frame]])
+            else:
+                res_namesA = self.res_namesA[frame]
+                res_namesB = self.res_namesB[frame]
         
-        # print contacts as a pandas table
-        if mode == 'table':
-            df0 = _table_df(res_namesA, self.resSeqsA, self.atomsA, self.countsA, iisA)
-            df1 = _table_df(res_namesB, self.resSeqsB, self.atomsB, self.countsB, iisB)
+            # print contacts as a pandas table
+            if mode == 'table':
+                df0 = _table_df(
+                    res_namesA, self.resSeqsA[frame], self.atomsA[frame], self.countsA[frame])
+                df1 = _table_df(
+                    res_namesB, self.resSeqsB[frame], self.atomsB[frame], self.countsB[frame])
 
-            print(
-                "".join(
-                    [
-                        "%s\n" % self.nameA,
-                        repr(df0),
-                        "\n\n%s\n" % self.nameB,
-                        repr(df1)]))
+                table_out = _add_spacing(
+                    "".join(
+                        [
+                            "%s%s%s\n" % (color.BOLD, self.nameA, color.END),
+                            repr(df0),
+                            "\n\n%s%s%s\n" % (color.BOLD, self.nameB, color.END),
+                            repr(df1)]),
+                    spacing)
+                print(table_out)
 
-        # print contacts as a fancy list (Residue, number, num_contacts
-        # -> i.e. Tyr64(4))
-        elif mode == 'fancy':
-            fancy_out0 = _fancy_df(res_namesA, self.resSeqsA, self.atomsA, self.countsA, iisA)
-            fancy_out1 = _fancy_df(res_namesB, self.resSeqsB, self.atomsB, self.countsB, iisB)
+            # print contacts as a fancy list (Residue, number, num_contacts
+            # -> i.e. Tyr64(4))
+            elif mode == 'fancy':
+                fancy_out0 = _fancy_df(
+                    res_namesA, self.resSeqsA[frame], self.atomsA[frame], self.countsA[frame])
+                fancy_out1 = _fancy_df(
+                    res_namesB, self.resSeqsB[frame], self.atomsB[frame], self.countsB[frame])
             
-            print(
-                "".join(
-                    [
-                        "%s\n" % self.nameA,
-                        fancy_out0,
-                        "\n\n%s\n" % self.nameB,
-                        fancy_out1]))
+                fancy_out = _add_spacing(
+                    "".join(
+                        [
+                            "%s\n" % self.nameA,
+                            fancy_out0,
+                            "\n\n%s\n" % self.nameB,
+                            fancy_out1]),
+                    spacing)
+                print(fancy_out)
 
-        # print contacts in a form to easily copy and past into chimerax
-        # (comma separated)
-        elif mode == 'chimerax':
-            chimerax_out = "".join(
-                [
-                    "%s\n" % self.nameA,
-                    ", ".join(np.array(resSeqsA[iisA],dtype=str)),
-                    "\n\n%s\n" % self.nameB,
-                    ", ".join(np.array(resSeqsB[iisB], dtype=str))])
-            print(chimerax_out)
+            # print contacts in a form to easily copy and past into chimerax
+            # (comma separated)
+            elif mode == 'chimerax':
+                chimerax_out = _add_spacing(
+                    "".join(
+                        [
+                            "%s%s%s\n" % (color.BOLD, self.nameA, color.END),
+                            ", ".join(np.array(self.resSeqsA[frame], dtype=str)),
+                            "\n\n%s%s%s\n" % (color.BOLD, self.nameB, color.END),
+                            ", ".join(np.array(self.resSeqsB[frame], dtype=str))]),
+                    spacing)
+                print(chimerax_out)
                 
-        # print contacts in a form to easily copy and paste into pymol
-        # (separated with a +)
-        elif mode == 'pymol':
-            pymol_out = "".join(
-                [
-                    "%s\n" % self.nameA,
-                    "+".join(np.array(self.resSeqsA[iisA],dtype=str)),
-                    "\n\n%s\n" % self.nameB,
-                    "+".join(np.array(self.resSeqsB[iisB],dtype=str))])
-            print(pymol_out)
+            # print contacts in a form to easily copy and paste into pymol
+            # (separated with a +)
+            elif mode == 'pymol':
+                pymol_out = _add_spacing(
+                    "".join(
+                        [
+                            "%s%s%s\n" % (color.BOLD, self.nameA, color.END),
+                            "+".join(np.array(self.resSeqsA[frame], dtype=str)),
+                            "\n\n%s%s%s\n" % (color.BOLD, self.nameB, color.END),
+                            "+".join(np.array(self.resSeqsB[frame], dtype=str))]),
+                    spacing)
+                print(pymol_out)
+            print("\n\n")
