@@ -256,16 +256,24 @@ def pairwise_contacts(
         # obtain contacts
         contacts_mask = pairwise_dist_mat <= dist_cutoff
 
+    else:
+        raise
+
+    # if mode is atom, count all atom-atom contacts as 1 count
     if mode == 'atom':
         names0 = np.array([str(a) for a in structA.top.atoms])
         names1 = np.array([str(a) for a in structB.top.atoms])
         iis_contacts = np.where(contacts_mask > 0)
         n_contacts = contacts_mask[iis_contacts]
 
+    # if mode is residue, compile all atom-atom contacts 
     elif mode == 'residue':
+
+        # obtain residue names
         names0 = np.array([str(r) for r in structA.top.residues])
         names1 = np.array([str(r) for r in structB.top.residues])
 
+        # obtain residue atom indices (used to compile atom-atom results)
         resi_iis_structA = [[a.index for a in r.atoms] for r in structA.top.residues]
         resi_iis_structB = [[a.index for a in r.atoms] for r in structB.top.residues]
 
@@ -273,6 +281,8 @@ def pairwise_contacts(
         n_resisB = len(resi_iis_structB)
         contacts_mask_residues = np.zeros(
             (structA.n_frames, n_resisA, n_resisB), dtype=int)
+
+        # iterate through structA and structB atom indices and compile
         for i in np.arange(n_resisA):
             for j in np.arange(n_resisB):
                 x,y = np.array(
@@ -284,6 +294,7 @@ def pairwise_contacts(
         iis_contacts = np.where(contacts_mask_residues > 0)
         n_contacts = contacts_mask_residues[iis_contacts]
 
+    # try to make a ragged array of contacts and names
     if n_contacts.shape[0] > 0:
         lengths = np.bincount(iis_contacts[0], minlength=pairwise_dist_mat.shape[0])
         n_contacts = ra.RaggedArray(n_contacts, lengths=lengths)
@@ -550,22 +561,27 @@ class Contacts():
 
     @property
     def _res_namesA(self):
+        """A list of residue names in structA"""
         return np.array([r.name for r in self.structA.top.residues])
 
     @property
     def _res_namesB(self):
+        """A list of residue names in structB"""
         return np.array([r.name for r in self.structB.top.residues])
 
     @property
     def _resSeqsA(self):
+        """A list of residue sequence numbers in structA"""
         return np.array([r.resSeq for r in self.structA.top.residues])
 
     @property
     def _resSeqsB(self):
+        """A list of residue sequence numbers in structB"""
         return np.array([r.resSeq for r in self.structB.top.residues])
 
     @property
     def resi_contactsA(self):
+        """A list of unique residue contacts per frame in structA"""
         if self.resSeqsA is None:
             resi_contactsA = None
         else:
@@ -580,6 +596,7 @@ class Contacts():
 
     @property
     def resi_contactsB(self):
+        """A list of unique residue contacts per frame in structB"""
         if self.resSeqsB is None:
             resi_contactsB = None
         else:
@@ -594,6 +611,8 @@ class Contacts():
 
     @property
     def resSeq_contactsA(self):
+        """A list of unique residue sequence numbers in contact
+           per frame in structA"""
         if self.resSeqsA is None:
             resSeq_contactsA = None
         else:
@@ -603,12 +622,55 @@ class Contacts():
 
     @property
     def resSeq_contactsB(self):
+        """A list of unique residue sequence numbers in contact
+        per frame in structB"""
         if self.resSeqsB is None:
             resSeq_contactsB = None
         else:
             resSeq_contactsB = ra.RaggedArray(
                 [np.unique(resSeqs) for resSeqs in self.resSeqsB])
         return resSeq_contactsB
+    
+    @property
+    def resSeqsA_total(self):
+        """A list of unique residue sequence numbers in contact
+        across all conformations of structA"""
+        return np.unique(self.resSeq_contactsA._data)
+
+    @property
+    def contactsA_total(self):
+        contactsA_total = np.array(
+            [
+                np.sum(
+                    self.countsA[ra.where(self.resSeqsA == r)])
+                for r in self.resSeqsA_total])
+        return contactsA_total
+
+    @property
+    def contactsB_total(self):
+        """A list of unique residue sequence numbers in contact
+        across all conformations of structB"""
+        contactsB_total = np.array(
+            [
+                np.sum(
+                    self.countsB[ra.where(self.resSeqsB == r)])
+                for r in self.resSeqsB_total])
+        return contactsB_total
+
+
+    @property
+    def avg_contactsA(self):
+        avg_contactsA = self.contactsA_total / self.resSeqsA.shape[0]
+        return avg_contactsA
+
+    @property
+    def resSeqsB_total(self):
+        return np.unique(self.resSeq_contactsB._data)
+
+    @property
+    def avg_contactsB(self):
+        avg_contactsB = self.contactsB_total / self.resSeqsB.shape[0]
+        return avg_contactsB
 
 
     def count_contacts(self, **kwargs):
