@@ -569,10 +569,13 @@ class Contacts():
         if self.resSeqsA is None:
             resi_contactsA = None
         else:
-            resi_contactsA = np.unique(
+            resi_contactsA = ra.RaggedArray(
                 [
-                    np.where(self._resSeqsA == r)[0]
-                    for r in self.resSeqsA]).flatten()
+                    np.unique(
+                        [
+                            np.where(self._resSeqsA == r)[0]
+                            for r in resSeqsA_frame]).flatten()
+                    for resSeqsA_frame in self.resSeqsA])
         return resi_contactsA
 
     @property
@@ -580,10 +583,13 @@ class Contacts():
         if self.resSeqsB is None:
             resi_contactsB = None
         else:
-            resi_contactsB = np.unique(
+            resi_contactsB = ra.RaggedArray(
                 [
-                    np.where(self._resSeqsB == r)[0]
-                    for r in self.resSeqsB]).flatten()
+                    np.unique(
+                        [
+                            np.where(self._resSeqsB == r)[0]
+                            for r in resSeqsB_frame]).flatten()
+                    for resSeqsB_frame in self.resSeqsB])
         return resi_contactsB
 
     @property
