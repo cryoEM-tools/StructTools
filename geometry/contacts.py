@@ -341,6 +341,24 @@ def count_PISA_contacts(structA, structB, **kwargs):
 #####################################################################
 
 
+def _unique_contacts(contacts_str):
+    unique_contacts_str = np.unique(contacts_str)
+    unique_counts = [
+        np.sum(contacts_str == c) for c in unique_contacts_str]
+    unique_contacts_chains, unique_contacts_resSeqs, \
+            unique_contacts_res, unique_contacts_atom = \
+        formatting._data_from_str(unique_contacts_str)
+    
+    # sort by chain, then resSeq
+    iis_sort = np.lexsort((unique_contacts_resSeqs, unique_contacts_chains))
+    unique_contacts_chains = list(np.array(unique_contacts_chains)[iis_sort])
+    unique_contacts_resSeqs = list(np.array(unique_contacts_resSeqs)[iis_sort])
+    unique_contacts_res = list(np.array(unique_contacts_res)[iis_sort])
+    unique_contacts_atom = list(np.array(unique_contacts_atom)[iis_sort])
+    return unique_contacts_chains, unique_contacts_resSeqs, unique_contacts_res, \
+        unique_contacts_atom, unique_counts
+
+
 class Contact():
     def __init__(self, nameA, nameB, chainA, chainB, n_contact):
         self.resA, self.resSeqA, self.atomA = formatting._process_str_name(nameA)
@@ -458,22 +476,17 @@ class ContactsFrame():
     def _update_unique_contacts(self):
         contactsA_str, contactsB_str = np.array(
             [contact.__str__().split(" :: ") for contact in self]).T
-        
-        self._unique_contactsA_str = np.unique(contactsA_str)
-        self._unique_countsA = [
-            np.sum(contactsA_str == c) for c in self._unique_contactsA_str]
-        
-        self._unique_contactsB_str = np.unique(contactsB_str)
-        self._unique_countsB = [
-            np.sum(contactsB_str == c) for c in self._unique_contactsB_str]
 
         self._unique_contacts_chainsA, self._unique_contacts_resSeqsA, \
-                self._unique_contacts_resA, self._unique_contacts_atomA = \
-            formatting._data_from_str(self._unique_contactsA_str)
+                self._unique_contacts_resA, self._unique_contacts_atomA, \
+                self._unique_countsA = \
+            _unique_contacts(contactsA_str)
+
         self._unique_contacts_chainsB, self._unique_contacts_resSeqsB, \
-                self._unique_contacts_resB, self._unique_contacts_atomB = \
-            formatting._data_from_str(self._unique_contactsB_str)
-        
+                self._unique_contacts_resB, self._unique_contacts_atomB, \
+                self._unique_countsB = \
+            _unique_contacts(contactsB_str)
+
     def set_chain_names(self, chain_namesA, chain_namesB):
         self._chain_namesA = chain_namesA
         self._chain_namesB = chain_namesB
