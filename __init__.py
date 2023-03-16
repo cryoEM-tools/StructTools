@@ -1,1 +1,1 @@
-from . import geometry, plotting, msm
+from . import contacts, geometry, plotting, msm
