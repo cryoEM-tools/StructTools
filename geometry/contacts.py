@@ -340,6 +340,23 @@ def count_PISA_contacts(structA, structB, **kwargs):
 #                             Reporting                             #
 #####################################################################
 
+def count_contacts(
+        structA, structB=None, criterion='dist', dist_cutoff=0.39, VDW_dist=1.4,
+        selA='heavy', selB='heavy', atom_indicesA=None, atom_indicesB=None,
+        mode='residue', structA_name='structA', structB_name='structB',
+        chain_namesA=None, chain_namesB=None):
+    if structB is None:
+        structB = structA
+    contact_dict = pairwise_contacts(
+        structA, structB=structB, criterion=criterion, dist_cutoff=dist_cutoff,
+        VDW_dist=VDW_dist, selA=selA, selB=selB, atom_indicesA=atom_indicesA,
+        atom_indicesB=atom_indicesB, mode=mode)
+    c = Contacts(
+        contact_dict=contact_dict, structA_name=structA_name,
+        structB_name=structB_name)
+    c.set_chain_names(chain_namesA, chain_namesB)
+    return c
+
 
 def _unique_contacts(contacts_str):
     unique_contacts_str = np.unique(contacts_str)
