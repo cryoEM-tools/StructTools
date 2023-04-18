@@ -77,7 +77,7 @@ def project_2D(
     color_palette = plt.cm.hot_r
 
     if eq_probs is None:
-        eq_probs = np.zeros(shape=data[0].shape[0]) + 1
+        eq_probs = np.zeros(shape=data.shape[0]) + 1
     k = kde.gaussian_kde(data.T, weights=eq_probs)
     xi, yi = np.mgrid[x.min()-x_add:x.max()+x_add:nbins*1j, y.min()-y_add:y.max()+y_add:nbins*1j]
     zi = k(np.vstack([xi.flatten(), yi.flatten()]))
