@@ -35,6 +35,32 @@ def pairwise_dists(structA, structB):
     return dists
 
 
+def pairwise_VDW_radii(structA, structB):
+    """Generates pairwise van der Waal radii between 2 sets of atoms.
+
+    Inputs
+    ----------
+    structA : md.Trajectory,
+        First structure for determining VDW radii.
+    structB : md.Trajectory,
+        Second structure for determining VDW radii.
+
+    Returns
+    ----------
+    VDW_radii : nd.array, shape=(n_atomsA, n_atomsB,)
+        pairwise sum of van der Waal radii between structA and structB.
+    """
+
+    # obtain struct VDW radii
+    VDW_radii_structA = np.array([a.element.radius for a in structA.top.atoms])
+    VDW_radii_structB = np.array([a.element.radius for a in structB.top.atoms])
+
+    # combine and sum radii
+    VDW_expanded = np.array([[v]*VDW_radii_structB.shape[0] for v in VDW_radii_structA])
+    VDW_radii = VDW_expanded + VDW_radii_structB[None,:]
+    return VDW_radii
+
+
 def _process_struct(struct, selection, atom_indices):
     if atom_indices is None:
         if selection in ['all', 'heavy', 'minimal', 'alpha']:
